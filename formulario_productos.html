@@ -384,7 +384,7 @@
             <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;">
                 <div class="status-bar" id="estadoCarga" style="display:none;">Cargando productos…</div>
                 <button class="btn btn-load" id="btnCargar" type="button">📂 Cargar productos</button>
-                <input type="file" id="fileCsv" accept=".csv,text/csv" style="display:none;" />
+                <input type="file" id="fileCsv" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none;" />
             </div>
             <div class="form-row">
                 <div class="form-group" style="flex:2; min-width: 280px;">
@@ -496,10 +496,12 @@
     }
 
     // ──────────────────────────────────────────────
-    //  CARGA DE PRODUCTOS DESDE UN ARCHIVO CSV
+    //  CARGA DE PRODUCTOS DESDE UN ARCHIVO CSV O XLSX
     //  (el archivo puede tener cualquier nombre; debe
-    //   contener columnas: Producto, Variante,
-    //   Precio costo y Precio liquidacion)
+    //   contener la columna Precio liquidacion. Producto,
+    //   Variante y Precio costo son opcionales: si faltan
+    //   Producto/Variante se rellenan con {---} y el
+    //   costo se asume 0)
     // ──────────────────────────────────────────────
     let productosData = [];
 
@@ -549,8 +551,10 @@
     }
 
     // Lee el contenido CSV (texto) y construye productosData.
-    // Nombre del producto = `${producto} ${variante}`.
-    // Costo -> columna "precio costo" | Liquidación -> columna "precio liquidacion"
+    // Nombre del producto = `${producto} ${variante}` (si falta la
+    //   columna de producto o variante se rellena con {---}).
+    // Costo -> columna "precio costo" (opcional, 0 si falta)
+    //        | Liquidación -> columna "precio liquidacion" (obligatoria)
     function cargarDesdeTexto(texto) {
         const filas = parseCSV(texto);
         if (filas.length === 0) throw new Error('CSV vacío');
@@ -562,25 +566,224 @@
         const idxCosto       = headers.indexOf('precio costo');
         const idxLiquidacion = headers.indexOf('precio liquidacion');
 
-        if (idxProducto === -1)    throw new Error('No se encontró la columna "Producto"');
-        if (idxVariante === -1)    throw new Error('No se encontró la columna "Variante"');
-        if (idxCosto === -1)       throw new Error('No se encontró la columna "Precio costo"');
+        // "Precio liquidacion" es la única columna obligatoria
         if (idxLiquidacion === -1) throw new Error('No se encontró la columna "Precio liquidacion"');
+        // "Precio costo" es opcional: si la columna no existe, el costo se asume 0
+        const costoDisponible = idxCosto !== -1;
+        // "Producto" y "Variante" son opcionales: si la columna no existe
+        // se rellena con el marcador {---}
+        const SIN_COLUMNA = '{---}';
 
-        const datos = filas.slice(1).map(f => {
-            const producto    = (f[idxProducto]    || '').trim();
-            const variante    = (f[idxVariante]    || '').trim();
-            const nombre      = `${producto} ${variante}`.trim();
+        const datos = [];
+        for (const f of filas.slice(1)) {
+            const productoRaw    = (f[idxProducto]    || '').trim();
+            const varianteRaw    = (f[idxVariante]    || '').trim();
+            const liquidacionRaw = (f[idxLiquidacion] || '').trim();
+            // Se omiten filas completamente vacías (sin datos en ninguna columna)
+            if (productoRaw === '' && varianteRaw === '' && liquidacionRaw === '') continue;
+
+            const producto = idxProducto === -1 ? SIN_COLUMNA : productoRaw;
+            const variante = idxVariante === -1 ? SIN_COLUMNA : varianteRaw;
+            // Si faltan ambas columnas, el nombre es un único marcador
+            const nombre   = (idxProducto === -1 && idxVariante === -1)
+                ? SIN_COLUMNA
+                : `${producto} ${variante}`.trim();
             // Cargar tal cual la tabla: si el precio está vacío se usa 0
-            const costo       = aNumero(f[idxCosto])       || 0;
-            const liquidacion = aNumero(f[idxLiquidacion]) || 0;
-            return [nombre, costo, liquidacion];
-        });
+            const costo       = costoDisponible ? (aNumero(f[idxCosto]) || 0) : 0;
+            const liquidacion = aNumero(liquidacionRaw) || 0;
+            datos.push([nombre, costo, liquidacion]);
+        }
 
         // Se conservan todas las filas que tengan nombre de producto
         productosData = datos.filter(p => p[0] !== '');
 
         if (productosData.length === 0) throw new Error('CSV vacío o sin datos válidos');
+    }
+
+    // ──────────────────────────────────────────────
+    //  LECTOR XLSX SIN LIBRERÍAS EXTERNAS
+    //  Un .xlsx es un ZIP que contiene XML. Se
+    //  descomprime con DecompressionStream (API nativa)
+    //  y se parsean las hojas con DOMParser.
+    // ──────────────────────────────────────────────
+
+    // Descomprime una entrada deflate del ZIP
+    async function descomprimirDeflate(datos, inicio, tamComp) {
+        const slice = datos.slice(inicio, inicio + tamComp);
+        const ds = new DecompressionStream('deflate-raw');
+        const stream = new Blob([slice]).stream().pipeThrough(ds);
+        const buf = await new Response(stream).arrayBuffer();
+        return new Uint8Array(buf);
+    }
+
+    const u16 = (v, o) => v[o] | (v[o + 1] << 8);
+    const u32 = (v, o) => v[o] | (v[o + 1] << 8) | (v[o + 2] << 16) | (v[o + 3] << 24);
+
+    // Descomprime el ZIP completo y devuelve { nombreArchivo: Uint8Array }
+    async function descomprimirZIP(buffer) {
+        const v = new Uint8Array(buffer);
+        const n = v.length;
+
+        // Buscar el registro "End of Central Directory" (firma PK\x05\x06)
+        let eocd = -1;
+        for (let i = n - 22; i >= 0; i--) {
+            if (v[i] === 0x50 && v[i + 1] === 0x4b && v[i + 2] === 0x05 && v[i + 3] === 0x06) {
+                eocd = i;
+                break;
+            }
+        }
+        if (eocd === -1) throw new Error('El archivo no es un XLSX válido (ZIP corrupto)');
+
+        const numEntradas = u16(v, eocd + 10);
+        let p = u32(v, eocd + 16); // offset del directorio central
+        if (numEntradas === 0 || p === 0 || p >= n) throw new Error('El archivo no es un XLSX válido');
+
+        const entradas = {};
+        for (let i = 0; i < numEntradas; i++) {
+            if (u32(v, p) !== 0x02014b50) break; // firma de entrada del directorio central
+            const metodo    = u16(v, p + 10);
+            const tamComp   = u32(v, p + 20);
+            const tamOrig   = u32(v, p + 24);
+            const nLen      = u16(v, p + 28);
+            const eLen      = u16(v, p + 30);
+            const cLen      = u16(v, p + 32);
+            const lho       = u32(v, p + 42); // offset del "local header"
+            const nombre    = new TextDecoder().decode(v.slice(p + 46, p + 46 + nLen));
+            const lhName    = u16(v, lho + 26);
+            const lhExtra   = u16(v, lho + 28);
+            entradas[nombre] = {
+                metodo, tamComp, tamOrig,
+                dataStart: lho + 30 + lhName + lhExtra,
+            };
+            p += 46 + nLen + eLen + cLen;
+        }
+        if (Object.keys(entradas).length === 0) throw new Error('El archivo no es un XLSX válido (sin entradas)');
+
+        const resultado = {};
+        for (const [nombre, e] of Object.entries(entradas)) {
+            if (e.metodo === 0) { // almacenado sin compresión
+                resultado[nombre] = v.slice(e.dataStart, e.dataStart + e.tamOrig);
+            } else if (e.metodo === 8) { // deflate
+                resultado[nombre] = await descomprimirDeflate(v, e.dataStart, e.tamComp);
+            } else {
+                throw new Error(`Método de compresión no soportado (${e.metodo}) en ${nombre}`);
+            }
+        }
+        return resultado;
+    }
+
+    // Convierte una referencia tipo "B3" a { col, row } (0-based)
+    function parseRef(ref) {
+        const m = /^([A-Z]+)(\d+)$/.exec(ref);
+        if (!m) return null;
+        let col = 0;
+        for (const ch of m[1]) col = col * 26 + (ch.charCodeAt(0) - 64);
+        return { col: col - 1, row: parseInt(m[2], 10) - 1 };
+    }
+
+    // Devuelve el texto de una celda según su tipo
+    function valorCelda(tipo, valor, sharedStrings) {
+        if (valor === undefined || valor === null || valor === '') return '';
+        if (tipo === 's') { // string compartido
+            const idx = parseInt(valor, 10);
+            return (sharedStrings[idx] ?? '').trim();
+        }
+        if (tipo === 'b') return valor === '1' ? 'VERDADERO' : 'FALSO';
+        return String(valor).trim();
+    }
+
+    // Lee un .xlsx y lo devuelve como texto CSV equivalente,
+    // tal cual vienen las columnas en la primera fila.
+    // Valida que sea un XLSX real y con hojas de cálculo.
+    async function xlsxATexto(archivo) {
+        const buffer = await archivo.arrayBuffer();
+        const entradas = await descomprimirZIP(buffer);
+
+        // Seleccionar la hoja a leer siguiendo el ORDEN del libro (workbook.xml),
+        // no el orden del directorio del ZIP (que puede listar las hojas en otro orden).
+        let hojaKey = null;
+        try {
+            const wbDoc = new DOMParser().parseFromString(
+                new TextDecoder().decode(entradas['xl/workbook.xml'] || new Uint8Array(0)).replace(/xmlns="[^"]*"/g, ''),
+                'application/xml'
+            );
+            const sheets = Array.from(wbDoc.getElementsByTagName('sheet'));
+            // Mapear r:id -> ruta del archivo de la hoja (xl/_rels/workbook.xml.rels)
+            let relMap = {};
+            if (entradas['xl/_rels/workbook.xml.rels']) {
+                const relDoc = new DOMParser().parseFromString(
+                    new TextDecoder().decode(entradas['xl/_rels/workbook.xml.rels']).replace(/xmlns="[^"]*"/g, ''),
+                    'application/xml'
+                );
+                for (const rel of relDoc.getElementsByTagName('Relationship')) {
+                    relMap[rel.getAttribute('Id')] = rel.getAttribute('Target') || '';
+                }
+            }
+            // Primera hoja del libro = la que Excel muestra primero
+            if (sheets.length) {
+                let path = relMap[sheets[0].getAttribute('r:id')] || '';
+                if (path.startsWith('/')) path = path.slice(1);
+                if (path && !path.startsWith('xl/')) path = 'xl/' + path;
+                if (entradas[path]) hojaKey = path;
+            }
+        } catch (err) { /* si falla, se usa el respaldo de abajo */ }
+
+        // Respaldo: primera hoja de cálculo que aparezca en el ZIP
+        if (!hojaKey) {
+            hojaKey = Object.keys(entradas).find(k => /^xl\/worksheets\/sheet\d+\.xml$/.test(k));
+        }
+        if (!hojaKey) throw new Error('El XLSX no contiene hojas de cálculo válidas');
+
+        // Strings compartidos (opcional)
+        let sharedStrings = [];
+        if (entradas['xl/sharedStrings.xml']) {
+            const ssDoc = new DOMParser().parseFromString(
+                new TextDecoder().decode(entradas['xl/sharedStrings.xml']).replace(/xmlns="[^"]*"/g, ''),
+                'application/xml'
+            );
+            sharedStrings = Array.from(ssDoc.getElementsByTagName('si')).map(si =>
+                Array.from(si.getElementsByTagName('t')).map(t => t.textContent).join('')
+            );
+        }
+
+        // XML de la hoja (se quita el namespace para simplificar la lectura)
+        const xmlHoja = new TextDecoder().decode(entradas[hojaKey]).replace(/xmlns="[^"]*"/g, '');
+        const doc = new DOMParser().parseFromString(xmlHoja, 'application/xml');
+        const sheetData = doc.getElementsByTagName('sheetData')[0];
+        if (!sheetData) throw new Error('El XLSX no contiene celdas (hoja vacía)');
+
+        // Recorrer filas y celdas, preservando celdas vacías del medio
+        const filas = [];
+        for (const rowEl of sheetData.getElementsByTagName('row')) {
+            const rIdx = parseInt(rowEl.getAttribute('r'), 10) || (filas.length + 1);
+            while (filas.length < rIdx) filas.push([]);
+            const fila = filas[rIdx - 1];
+            for (const c of rowEl.getElementsByTagName('c')) {
+                const tipo = c.getAttribute('t') || 'n';
+                const vEl = c.getElementsByTagName('v')[0];
+                const isEl = c.getElementsByTagName('is')[0];
+                let valor = '';
+                if (isEl) {
+                    valor = Array.from(isEl.getElementsByTagName('t')).map(t => t.textContent).join('');
+                } else if (vEl) {
+                    valor = valorCelda(tipo, vEl.textContent, sharedStrings);
+                }
+                const ref = parseRef(c.getAttribute('r') || '');
+                if (ref) {
+                    while (fila.length < ref.col + 1) fila.push('');
+                    fila[ref.col] = valor;
+                }
+            }
+        }
+
+        if (filas.length === 0) throw new Error('El XLSX está vacío o sin datos');
+
+        // Normalizar el ancho de columnas y convertir a CSV
+        const maxCols = filas.reduce((m, f) => Math.max(m, f.length), 0);
+        return filas.map(f => {
+            while (f.length < maxCols) f.push('');
+            return f.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
+        }).join('\n');
     }
 
     // ──────────────────────────────────────────────
@@ -1221,23 +1424,22 @@
         fileCsv.click();
     });
 
-    // Procesar el archivo CSV elegido (puede tener cualquier nombre)
+    // Procesar el archivo elegido (CSV o XLSX)
     fileCsv.addEventListener('change', (e) => {
         const archivo = e.target.files && e.target.files[0];
         if (!archivo) return;
 
-        // Validar que el archivo sea CSV
-        const esCSV =
-            /\.csv$/i.test(archivo.name) ||
-            archivo.type === 'text/csv' ||
-            archivo.type === 'application/vnd.ms-excel' ||
-            archivo.type === 'application/csv' ||
-            archivo.type === '';
+        // Validar el formato según extensión y tipo MIME
+        const esCSV  = /\.csv$/i.test(archivo.name) ||
+                       archivo.type === 'text/csv' ||
+                       archivo.type === 'application/csv';
+        const esXLSX = /\.xlsx$/i.test(archivo.name) ||
+                       archivo.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-        if (!esCSV) {
+        if (!esCSV && !esXLSX) {
             productosData = [];
             mostrarEstado(
-                `❌ "${archivo.name}" no es un archivo CSV. Selecciona un archivo con extensión .csv`,
+                `❌ "${archivo.name}" no tiene un formato compatible. Selecciona un archivo .csv o .xlsx`,
                 'error'
             );
             fileCsv.value = '';
@@ -1248,10 +1450,10 @@
         btnCargar.textContent = '⏳ Cargando…';
         mostrarEstado(`Cargando ${archivo.name}…`, 'info');
 
-        const lector = new FileReader();
-        lector.onload = () => {
+        // Procesa el texto (CSV o el CSV generado desde XLSX) y
+        // valida que tenga las columnas requeridas
+        const procesar = (texto) => {
             try {
-                const texto = String(lector.result).replace(/^\uFEFF/, ''); // quitar BOM
                 cargarDesdeTexto(texto);
                 // Actualizar los precios de las filas ya agregadas con el catálogo recién cargado
                 const huboFilas = filas.length > 0;
@@ -1266,7 +1468,7 @@
                 guardarProductos(archivo.name);
                 mostrarEstado(`✅ ${productosData.length} productos cargados desde ${archivo.name}`, 'ok');
             } catch (error) {
-                console.error('No se pudo cargar el CSV:', error);
+                console.error('No se pudo cargar el archivo:', error);
                 productosData = [];
                 mostrarEstado(`❌ No se pudo cargar ${archivo.name}: ${error.message}`, 'error');
             } finally {
@@ -1279,13 +1481,41 @@
                 productoInput.focus();
             }
         };
-        lector.onerror = () => {
-            productosData = [];
-            mostrarEstado(`❌ No se pudo leer el archivo ${archivo.name}.`, 'error');
-            btnCargar.disabled = false;
-            btnCargar.textContent = '📂 Cargar productos';
-        };
-        lector.readAsText(archivo);
+
+        if (esXLSX) {
+            // XLSX: ZIP + XML con APIs nativas del navegador
+            if (typeof DecompressionStream === 'undefined') {
+                productosData = [];
+                mostrarEstado(
+                    '❌ Tu navegador no soporta la lectura de XLSX (falta DecompressionStream). Usa un archivo .csv o actualiza el navegador.',
+                    'error'
+                );
+                fileCsv.value = '';
+                return;
+            }
+            xlsxATexto(archivo)
+                .then(procesar)
+                .catch(error => {
+                    console.error('No se pudo leer el XLSX:', error);
+                    productosData = [];
+                    mostrarEstado(`❌ No se pudo leer "${archivo.name}": ${error.message}`, 'error');
+                    btnCargar.disabled = false;
+                    btnCargar.textContent = '📂 Cargar productos';
+                    fileCsv.value = '';
+                });
+        } else {
+            const lector = new FileReader();
+            lector.onload = () => {
+                procesar(String(lector.result).replace(/^\uFEFF/, '')); // quitar BOM
+            };
+            lector.onerror = () => {
+                productosData = [];
+                mostrarEstado(`❌ No se pudo leer el archivo ${archivo.name}.`, 'error');
+                btnCargar.disabled = false;
+                btnCargar.textContent = '📂 Cargar productos';
+            };
+            lector.readAsText(archivo);
+        }
     });
 
     // Restaurar productos guardados de la última carga (si existen)
@@ -1297,7 +1527,7 @@
             'ok'
         );
     } else {
-        mostrarEstado('ℹ️ Pulsa "Cargar productos" y elige un archivo CSV con columnas: Producto, Variante, Precio costo y Precio liquidacion', 'info');
+        mostrarEstado('ℹ️ Pulsa "Cargar productos" y elige un archivo .csv o .xlsx con la columna Precio liquidacion (Producto/Variante opcionales → se rellenan con {---})', 'info');
     }
 
     // Restaurar las filas de la tabla guardadas (si existen)
