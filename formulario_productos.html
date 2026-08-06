@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulario de Productos - Marice</title>
+    <style>
+        :root {
+            --bg: #f4f6f9;
+            --card-bg: #ffffff;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
+            --radius: 10px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body { height: 100%; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+            padding: 1.25rem 2rem;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+            color: var(--text);
+            font-weight: 700;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* ── Formulario ─────────────────────────── */
+        .form-row {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        /* ── Estado de carga de productos ──────── */
+        .status-bar {
+            padding: 0.6rem 0.9rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .status-ok {
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+        }
+
+        .status-warn {
+            background: #fffbeb;
+            color: #b45309;
+            border: 1px solid #fde68a;
+        }
+
+        .status-info {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .status-error {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Autocomplete wrapper ──────────────── */
+        .autocomplete-wrapper {
+            position: relative;
+        }
+
+        .autocomplete-wrapper input {
+            width: 100%;
+            padding: 0.65rem 0.85rem;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+            background: #fafbfc;
+        }
+
+        .autocomplete-wrapper input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+            background: #fff;
+        }
+
+        .suggestions-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 260px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1.5px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+            display: none;
+            list-style: none;
+        }
+
+        .suggestions-list.visible { display: block; }
+
+        .suggestions-list li {
+            padding: 0.55rem 0.85rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.15s;
+        }
+
+        .suggestions-list li:hover,
+        .suggestions-list li.active {
+            background: #eff6ff;
+            color: var(--primary);
+        }
+
+        .suggestions-list li .muted {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            margin-left: 0.5rem;
+        }
+
+        /* ── Inputs genéricos ──────────────────── */
+        .form-group input[type="number"] {
+            padding: 0.65rem 0.85rem;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            background: #fafbfc;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+            background: #fff;
+        }
+
+        .btn {
+            padding: 0.65rem 1.6rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+
+        .btn:active { transform: scale(0.97); }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .btn-danger:hover { background: var(--danger-hover); }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--danger);
+            border: 1.5px solid var(--danger);
+        }
+
+        .btn-outline:hover { background: #fef2f2; }
+
+        .btn-load {
+            background: #059669;
+            color: #fff;
+            white-space: nowrap;
+        }
+
+        .btn-load:hover { background: #047857; }
+
+        .btn-export {
+            background: #7c3aed;
+            color: #fff;
+            white-space: nowrap;
+        }
+
+        .btn-export:hover { background: #6d28d9; }
+
+        /* ── Barra de acciones de la tabla ────── */
+        .actions-bar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        /* ── Tabla ──────────────────────────────── */
+        .table-wrapper {
+            overflow: visible;
+        }
+
+        /* ── Scroll solo de la tabla ───────────── */
+        #tablaCard {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .table-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.9rem;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #f8fafc;
+            text-align: left;
+            padding: 0.75rem 0.85rem;
+            font-weight: 700;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--text-muted);
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+
+        tbody tr:hover { background: #f8fafc; }
+
+        tbody tr:last-child td { border-bottom: none; }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-mono { font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace; }
+
+        /* ── Totales ────────────────────────────── */
+        .totals-bar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 2rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 2px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .totals-bar .total-item {
+            text-align: right;
+        }
+
+        .totals-bar .total-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+
+        .totals-bar .total-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+
+        /* ── Estado vacío ──────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon { font-size: 3rem; margin-bottom: 0.75rem; }
+
+        /* ── Badge de cantidad ─────────────────── */
+        .qty-badge {
+            display: inline-block;
+            background: #eff6ff;
+            color: var(--primary);
+            font-weight: 700;
+            padding: 0.15rem 0.55rem;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            min-width: 2rem;
+            text-align: center;
+        }
+
+        /* ── Responsive ────────────────────────── */
+        @media (max-width: 640px) {
+            body { padding: 1rem; }
+            .card { padding: 1rem; }
+            .form-row { flex-direction: column; }
+            .btn { width: 100%; }
+            .totals-bar { flex-direction: column; gap: 0.5rem; align-items: flex-end; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 Registro de Productos — Marice</h1>
+
+        <!-- ── Formulario ──────────────────────── -->
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;">
+                <div class="status-bar" id="estadoCarga" style="display:none;">Cargando productos…</div>
+                <button class="btn btn-load" id="btnCargar" type="button">📂 Cargar productos</button>
+                <input type="file" id="fileCsv" accept=".csv,text/csv" style="display:none;" />
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:2; min-width: 280px;">
+                    <label for="productoInput">🔍 Producto</label>
+                    <div class="autocomplete-wrapper" id="autocompleteWrapper">
+                        <input
+                            type="text"
+                            id="productoInput"
+                            placeholder="Escribe para buscar producto..."
+                            autocomplete="off"
+                        />
+                        <ul class="suggestions-list" id="suggestionsList"></ul>
+                    </div>
+                </div>
+                <div class="form-group" style="max-width: 140px;">
+                    <label for="cantidadInput">🔢 Cantidad</label>
+                    <input
+                        type="number"
+                        id="cantidadInput"
+                        placeholder="1"
+                        min="1"
+                        value="1"
+                    />
+                </div>
+                <div class="form-group" style="justify-content: flex-end;">
+                    <button class="btn btn-primary" id="btnAgregar" type="button">
+                        ➕ Agregar
+                    </button>
+                </div>
+            </div>
+            <!-- Info del producto seleccionado -->
+            <div id="productoPreview" style="margin-top: 0.75rem; font-size: 0.82rem; color: var(--text-muted); min-height: 1.2rem;"></div>
+        </div>
+
+        <!-- ── Tabla ───────────────────────────── -->
+        <div class="card" id="tablaCard">
+            <div class="table-scroll">
+                <div class="table-wrapper">
+                    <table id="tablaProductos">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Producto</th>
+                            <th class="text-center">Cantidad</th>
+                            <th class="text-right">Costo Unit.</th>
+                            <th class="text-right">Liquidación Unit.</th>
+                            <th class="text-right">Margen Unit.</th>
+                            <th class="text-right">Subtotal Costo</th>
+                            <th class="text-right">Subtotal Liquidación</th>
+                            <th class="text-right">Subtotal Margen</th>
+                            <th class="text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaBody">
+                        <tr class="empty-state" id="emptyRow">
+                            <td colspan="10">
+                                <div class="icon">📋</div>
+                                <p>No hay productos agregados aún.</p>
+                                <p style="font-size:0.8rem;">Usa el formulario de arriba para agregar productos.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+            </div>
+
+            <!-- Totales -->
+            <div class="totals-bar" id="totalsBar" style="display:none;">
+                <div class="total-item">
+                    <div class="total-label">Total Items</div>
+                    <div class="total-value" id="totalItems">0</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-label">Total Costo</div>
+                    <div class="total-value" id="totalCosto">$0.00</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-label">Total Liquidación</div>
+                    <div class="total-value" id="totalLiquidacion">$0.00</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-label">Total Margen</div>
+                    <div class="total-value" id="totalMargen">$0.00</div>
+                </div>
+            </div>
+
+            <!-- Acciones: exportar y limpiar (siempre visibles) -->
+            <div class="actions-bar" id="btnClearWrapper">
+                <button class="btn btn-export" id="btnExportar" type="button">📥 Exportar CSV</button>
+                <button class="btn btn-export" id="btnExportarExcel" type="button">📊 Exportar Excel</button>
+                <button class="btn btn-outline" id="btnLimpiar" type="button">🗑️ Limpiar tabla</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ──────────────────────────────────────────────
+    //  FORMATEO MONEDA (USD)
+    // ──────────────────────────────────────────────
+    const formatoUSD = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
+    function usd(valor) {
+        return formatoUSD.format(valor);
+    }
+
+    // ──────────────────────────────────────────────
+    //  CARGA DE PRODUCTOS DESDE UN ARCHIVO CSV
+    //  (el archivo puede tener cualquier nombre; debe
+    //   contener columnas: Producto, Variante,
+    //   Precio costo y Precio liquidacion)
+    // ──────────────────────────────────────────────
+    let productosData = [];
+
+    // Parser CSV que respeta campos entre comillas
+    function parseCSV(texto) {
+        const filas = [];
+        let fila = [];
+        let campo = '';
+        let enComillas = false;
+
+        for (let i = 0; i < texto.length; i++) {
+            const c = texto[i];
+            if (enComillas) {
+                if (c === '"') {
+                    if (texto[i + 1] === '"') { campo += '"'; i++; }
+                    else enComillas = false;
+                } else {
+                    campo += c;
+                }
+            } else {
+                if (c === '"') {
+                    enComillas = true;
+                } else if (c === ',') {
+                    fila.push(campo); campo = '';
+                } else if (c === '\n' || c === '\r') {
+                    if (c === '\r' && texto[i + 1] === '\n') i++;
+                    fila.push(campo); campo = '';
+                    filas.push(fila); fila = [];
+                } else {
+                    campo += c;
+                }
+            }
+        }
+        if (campo !== '' || fila.length) { fila.push(campo); filas.push(fila); }
+        return filas;
+    }
+
+    // Normaliza un encabezado: quita acentos, pasa a minúsculas y recorta espacios
+    function normalizarEncabezado(str) {
+        return (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    // Convierte un valor a número (soporta "$1,234.56", "-5", etc.)
+    function aNumero(valor) {
+        const limpio = String(valor).replace(/[^0-9.\-]/g, '');
+        return parseFloat(limpio);
+    }
+
+    // Lee el contenido CSV (texto) y construye productosData.
+    // Nombre del producto = `${producto} ${variante}`.
+    // Costo -> columna "precio costo" | Liquidación -> columna "precio liquidacion"
+    function cargarDesdeTexto(texto) {
+        const filas = parseCSV(texto);
+        if (filas.length === 0) throw new Error('CSV vacío');
+
+        const headers = filas[0].map(normalizarEncabezado);
+
+        const idxProducto    = headers.indexOf('producto');
+        const idxVariante    = headers.indexOf('variante');
+        const idxCosto       = headers.indexOf('precio costo');
+        const idxLiquidacion = headers.indexOf('precio liquidacion');
+
+        if (idxProducto === -1)    throw new Error('No se encontró la columna "Producto"');
+        if (idxVariante === -1)    throw new Error('No se encontró la columna "Variante"');
+        if (idxCosto === -1)       throw new Error('No se encontró la columna "Precio costo"');
+        if (idxLiquidacion === -1) throw new Error('No se encontró la columna "Precio liquidacion"');
+
+        const datos = filas.slice(1).map(f => {
+            const producto    = (f[idxProducto]    || '').trim();
+            const variante    = (f[idxVariante]    || '').trim();
+            const nombre      = `${producto} ${variante}`.trim();
+            // Cargar tal cual la tabla: si el precio está vacío se usa 0
+            const costo       = aNumero(f[idxCosto])       || 0;
+            const liquidacion = aNumero(f[idxLiquidacion]) || 0;
+            return [nombre, costo, liquidacion];
+        });
+
+        // Se conservan todas las filas que tengan nombre de producto
+        productosData = datos.filter(p => p[0] !== '');
+
+        if (productosData.length === 0) throw new Error('CSV vacío o sin datos válidos');
+    }
+
+    // ──────────────────────────────────────────────
+    //  PERSISTENCIA (localStorage)
+    //  Los productos cargados se guardan para que
+    //  sigan disponibles al recargar la página.
+    // ──────────────────────────────────────────────
+    const STORAGE_KEY = 'marice_productos_v1';
+
+    function guardarProductos(nombreArchivo) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                nombreArchivo: nombreArchivo || '',
+                productos: productosData,
+                fecha: new Date().toISOString(),
+            }));
+        } catch (error) {
+            console.warn('No se pudieron persistir los productos:', error);
+        }
+    }
+
+    function recuperarProductosGuardados() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            if (Array.isArray(data.productos) && data.productos.length > 0) {
+                return data;
+            }
+        } catch (error) {
+            console.warn('No se pudieron leer los productos guardados:', error);
+        }
+        return null;
+    }
+
+    // Filas de la tabla (productos agregados)
+    const STORAGE_KEY_FILAS = 'marice_filas_v1';
+
+    function guardarFilas() {
+        try {
+            localStorage.setItem(STORAGE_KEY_FILAS, JSON.stringify(filas));
+        } catch (error) {
+            console.warn('No se pudieron persistir las filas de la tabla:', error);
+        }
+    }
+
+    function recuperarFilasGuardadas() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_FILAS);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            if (Array.isArray(data)) return data;
+        } catch (error) {
+            console.warn('No se pudieron leer las filas guardadas:', error);
+        }
+        return null;
+    }
+
+    function mostrarEstado(mensaje, tipo) {
+        const el = document.getElementById('estadoCarga');
+        if (!el) return;
+        el.textContent = mensaje;
+        const clase = tipo === 'ok' ? 'status-ok'
+            : tipo === 'warn' ? 'status-warn'
+            : tipo === 'error' ? 'status-error'
+            : 'status-info';
+        el.className = 'status-bar ' + clase;
+        el.style.display = 'block';
+    }
+
+    // ──────────────────────────────────────────────
+    //  REFERENCIAS DOM
+    // ──────────────────────────────────────────────
+    const productoInput   = document.getElementById('productoInput');
+    const cantidadInput   = document.getElementById('cantidadInput');
+    const suggestionsList = document.getElementById('suggestionsList');
+    const btnAgregar      = document.getElementById('btnAgregar');
+    const btnCargar       = document.getElementById('btnCargar');
+    const fileCsv         = document.getElementById('fileCsv');
+    const btnExportar     = document.getElementById('btnExportar');
+    const btnExportarExcel = document.getElementById('btnExportarExcel');
+    const tablaBody       = document.getElementById('tablaBody');
+    const emptyRow        = document.getElementById('emptyRow');
+    const totalsBar       = document.getElementById('totalsBar');
+    const btnLimpiar      = document.getElementById('btnLimpiar');
+    const productoPreview = document.getElementById('productoPreview');
+
+    const totalItemsEl      = document.getElementById('totalItems');
+    const totalCostoEl      = document.getElementById('totalCosto');
+    const totalLiquidacionEl = document.getElementById('totalLiquidacion');
+    const totalMargenEl     = document.getElementById('totalMargen');
+
+    // ──────────────────────────────────────────────
+    //  ESTADO
+    // ──────────────────────────────────────────────
+    let productoSeleccionado = null;   // el array [nombre, costo, liquidacion]
+    let filas = [];                     // { producto, cantidad, costo, liquidacion }
+    let selectedSuggestionIdx = -1;
+
+    // ──────────────────────────────────────────────
+    //  AUTOCOMPLETE
+    // ──────────────────────────────────────────────
+    function normalize(str) {
+        return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    // ── Búsqueda difusa (fuzzy) ──────────────────
+    // Devuelve un puntaje (mayor = mejor coincidencia) o null si no hay match.
+    // Los caracteres de la búsqueda deben aparecer en orden en el nombre,
+    // aunque no sean consecutivos.
+    function fuzzyScore(target, query) {
+        if (!query) return 0;
+
+        let score = 0;
+        let consecutive = 0;
+        let t = 0;
+        let firstMatch = -1;
+        let lastMatch = -1;
+
+        for (let q = 0; q < query.length; q++) {
+            const c = query[q];
+            let found = false;
+            while (t < target.length) {
+                if (target[t] === c) {
+                    found = true;
+                    if (firstMatch === -1) firstMatch = t;
+                    if (lastMatch !== -1 && t === lastMatch + 1) {
+                        consecutive++;
+                        score += 8 + consecutive;      // bonus por caracteres seguidos
+                    } else {
+                        consecutive = 1;
+                        score += 4;
+                    }
+                    if (t === 0 || target[t - 1] === ' ') {
+                        score += 10;                   // bonus inicio / inicio de palabra
+                    }
+                    lastMatch = t;
+                    t++;
+                    break;
+                }
+                t++;
+            }
+            if (!found) return null;
+        }
+
+        // Penalizar cuando la coincidencia se "estira" mucho dentro del nombre
+        const span = lastMatch - firstMatch + 1;
+        score -= (span - query.length) * 1.5;
+        return score;
+    }
+
+    function filtrarProductos(query) {
+        if (!query.trim()) return [];
+        const q = normalize(query);
+        return productosData
+            .map(p => ({ p, score: fuzzyScore(normalize(p[0]), q) }))
+            .filter(x => x.score !== null)
+            .sort((a, b) => b.score - a.score)
+            .map(x => x.p)
+            .slice(0, 20); // límite de sugerencias mostradas
+    }
+
+    function mostrarSugerencias(sugerencias) {
+        suggestionsList.innerHTML = '';
+        selectedSuggestionIdx = -1;
+
+        if (sugerencias.length === 0) {
+            suggestionsList.classList.remove('visible');
+            return;
+        }
+
+        sugerencias.forEach((p, i) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${escapeHTML(p[0])}</span><span class="muted">${usd(p[1])}</span>`;
+            li.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // evitar que el blur cierre antes del click
+                seleccionarProducto(p);
+            });
+            li.dataset.index = i;
+            suggestionsList.appendChild(li);
+        });
+
+        suggestionsList.classList.add('visible');
+    }
+
+    function seleccionarProducto(p) {
+        productoInput.value = p[0];
+        productoSeleccionado = p;
+        suggestionsList.classList.remove('visible');
+        selectedSuggestionIdx = -1;
+        actualizarPreview();
+    }
+
+    function actualizarPreview() {
+        if (productoSeleccionado) {
+            const p = productoSeleccionado;
+            productoPreview.innerHTML = `
+                ✅ <strong>${escapeHTML(p[0])}</strong> &nbsp;|&nbsp;
+                Costo: <strong>${usd(p[1])}</strong> &nbsp;|&nbsp;
+                Liquidación: <strong>${usd(p[2])}</strong>
+            `;
+        } else {
+            productoPreview.textContent = '';
+        }
+    }
+
+    function escapeHTML(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // ── Eventos del input ────────────────────────
+    productoInput.addEventListener('input', () => {
+        productoSeleccionado = null;
+        actualizarPreview();
+        const sugerencias = filtrarProductos(productoInput.value);
+        mostrarSugerencias(sugerencias);
+    });
+
+    productoInput.addEventListener('keydown', (e) => {
+        const items = suggestionsList.querySelectorAll('li');
+        if (!items.length) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedSuggestionIdx = Math.min(selectedSuggestionIdx + 1, items.length - 1);
+            resaltarItem(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedSuggestionIdx = Math.max(selectedSuggestionIdx - 1, -1);
+            resaltarItem(items);
+        } else if (e.key === 'Tab') {
+            // Seleccionar el ítem resaltado (o la primera sugerencia si no hay
+            // resaltado) y mover el foco al siguiente campo (Cantidad)
+            if (items.length > 0) {
+                e.preventDefault();
+                const idx = selectedSuggestionIdx >= 0 ? selectedSuggestionIdx : 0;
+                const p = filtrarProductos(productoInput.value)[idx];
+                if (p) {
+                    seleccionarProducto(p);
+                    cantidadInput.focus();
+                    cantidadInput.select();
+                }
+            }
+            // Sin sugerencias: se deja el comportamiento normal de Tab
+        } else if (e.key === 'Enter') {
+            if (selectedSuggestionIdx >= 0 && selectedSuggestionIdx < items.length) {
+                e.preventDefault();
+                const idx = selectedSuggestionIdx;
+                const p = filtrarProductos(productoInput.value)[idx];
+                if (p) seleccionarProducto(p);
+            } else {
+                // Si no hay selección en la lista, intentar agregar directamente
+                e.preventDefault();
+                agregarProducto();
+            }
+        } else if (e.key === 'Escape') {
+            suggestionsList.classList.remove('visible');
+            selectedSuggestionIdx = -1;
+        }
+    });
+
+    function resaltarItem(items) {
+        items.forEach((li, i) => {
+            li.classList.toggle('active', i === selectedSuggestionIdx);
+            if (i === selectedSuggestionIdx) {
+                li.scrollIntoView({ block: 'nearest' });
+            }
+        });
+    }
+
+    // Cerrar sugerencias al hacer clic fuera
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#autocompleteWrapper')) {
+            suggestionsList.classList.remove('visible');
+            selectedSuggestionIdx = -1;
+        }
+    });
+
+    // ──────────────────────────────────────────────
+    //  AGREGAR PRODUCTO A LA TABLA
+    // ──────────────────────────────────────────────
+    function agregarProducto() {
+        if (productosData.length === 0) {
+            alert('Primero carga los productos con el botón "Cargar productos".');
+            return;
+        }
+
+        // Si el usuario escribió algo pero no seleccionó de la lista,
+        // intentar hacer match exacto
+        if (!productoSeleccionado) {
+            const texto = productoInput.value.trim();
+            if (!texto) {
+                alert('Por favor selecciona un producto de la lista.');
+                productoInput.focus();
+                return;
+            }
+            // Buscar coincidencia exacta (case-insensitive, normalizada)
+            const match = productosData.find(p => normalize(p[0]) === normalize(texto));
+            if (match) {
+                productoSeleccionado = match;
+                productoInput.value = match[0];
+                actualizarPreview();
+            } else {
+                alert('Producto no encontrado. Selecciona uno de la lista de sugerencias.');
+                productoInput.focus();
+                return;
+            }
+        }
+
+        const cantidad = parseInt(cantidadInput.value, 10);
+        if (!cantidad || cantidad < 1) {
+            alert('Ingresa una cantidad válida (mínimo 1).');
+            cantidadInput.focus();
+            return;
+        }
+
+        const [nombre, costo, liquidacion] = productoSeleccionado;
+
+        // Si el producto ya existe en la tabla, se suma la cantidad a la fila existente
+        const existente = filas.find(f => normalize(f.producto) === normalize(nombre));
+        if (existente) {
+            existente.cantidad += cantidad;
+        } else {
+            filas.push({
+                producto: nombre,
+                cantidad: cantidad,
+                costo: costo,
+                liquidacion: liquidacion,
+            });
+        }
+
+        renderizarTabla();
+        resetearFormulario();
+        productoInput.focus();
+    }
+
+    function resetearFormulario() {
+        productoInput.value = '';
+        productoSeleccionado = null;
+        cantidadInput.value = '1';
+        suggestionsList.classList.remove('visible');
+        selectedSuggestionIdx = -1;
+        productoPreview.textContent = '';
+    }
+
+    // ──────────────────────────────────────────────
+    //  RENDERIZAR TABLA
+    // ──────────────────────────────────────────────
+    function renderizarTabla() {
+        guardarFilas(); // persistir el estado actual de la tabla
+        tablaBody.innerHTML = '';
+
+        if (filas.length === 0) {
+            tablaBody.innerHTML = `
+                <tr class="empty-state" id="emptyRow">
+                    <td colspan="10">
+                        <div class="icon">📋</div>
+                        <p>No hay productos agregados aún.</p>
+                        <p style="font-size:0.8rem;">Usa el formulario de arriba para agregar productos.</p>
+                    </td>
+                </tr>
+            `;
+            totalsBar.style.display = 'none';
+            return;
+        }
+
+        let totalCosto = 0;
+        let totalLiquid = 0;
+        let totalMargen = 0;
+        let totalQty = 0;
+
+        filas.forEach((f, i) => {
+            const subCosto = f.cantidad * f.costo;
+            const subLiquid = f.cantidad * f.liquidacion;
+            const margen = f.liquidacion - f.costo;      // margen unitario
+            const subMargen = f.cantidad * margen;
+            totalCosto += subCosto;
+            totalLiquid += subLiquid;
+            totalMargen += subMargen;
+            totalQty += f.cantidad;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${i + 1}</td>
+                <td><strong>${escapeHTML(f.producto)}</strong></td>
+                <td class="text-center"><span class="qty-badge">${f.cantidad}</span></td>
+                <td class="text-right font-mono">${usd(f.costo)}</td>
+                <td class="text-right font-mono">${usd(f.liquidacion)}</td>
+                <td class="text-right font-mono">${usd(margen)}</td>
+                <td class="text-right font-mono"><strong>${usd(subCosto)}</strong></td>
+                <td class="text-right font-mono"><strong>${usd(subLiquid)}</strong></td>
+                <td class="text-right font-mono"><strong>${usd(subMargen)}</strong></td>
+                <td class="text-center">
+                    <button class="btn btn-danger" style="padding:0.3rem 0.6rem; font-size:0.75rem;"
+                            onclick="eliminarFila(${i})" title="Eliminar">
+                        ✕
+                    </button>
+                </td>
+            `;
+            tablaBody.appendChild(tr);
+        });
+
+        // Actualizar totales
+        totalItemsEl.textContent = totalQty;
+        totalCostoEl.textContent = usd(totalCosto);
+        totalLiquidacionEl.textContent = usd(totalLiquid);
+        totalMargenEl.textContent = usd(totalMargen);
+
+        totalsBar.style.display = 'flex';
+    }
+
+    function eliminarFila(index) {
+        filas.splice(index, 1);
+        renderizarTabla();
+    }
+
+    // ──────────────────────────────────────────────
+    //  EXPORTAR A CSV
+    // ──────────────────────────────────────────────
+    function csvEscape(valor) {
+        const s = String(valor);
+        if (/[",\n\r]/.test(s)) {
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+    }
+
+    function exportarCSV() {
+        if (filas.length === 0) {
+            alert('No hay productos para exportar. Primero agrega productos a la lista.');
+            return;
+        }
+
+        const cabecera = ['Producto', 'Cantidad', 'Costo', 'Liquidación', 'Margen', 'Subtotal Costo', 'Subtotal Liquidación', 'Subtotal Margen'];
+        const filasCSV = filas.map(f => [
+            f.producto,
+            f.cantidad,
+            f.costo,
+            f.liquidacion,
+            f.liquidacion - f.costo,
+            f.cantidad * f.costo,
+            f.cantidad * f.liquidacion,
+            f.cantidad * (f.liquidacion - f.costo),
+        ]);
+
+        const totalQty = filas.reduce((acc, f) => acc + f.cantidad, 0);
+        const totalCosto = filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0);
+        const totalLiquid = filas.reduce((acc, f) => acc + f.cantidad * f.liquidacion, 0);
+        const totalMargen = totalLiquid - totalCosto;
+
+        const filasFinales = [
+            cabecera,
+            ...filasCSV,
+            [],
+            ['TOTAL', totalQty, '', '', '', totalCosto, totalLiquid, totalMargen],
+        ];
+
+        const csv = filasFinales.map(f => f.map(csvEscape).join(',')).join('\r\n');
+
+        descargarArchivo(csv, 'text/csv;charset=utf-8;', 'csv');
+    }
+
+    // Nombre del archivo de exportación: venta_por_productos_{fecha}_{hora}
+    function nombreArchivoExportacion(ext) {
+        const ahora = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const fecha = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}`;
+        const hora = `${pad(ahora.getHours())}-${pad(ahora.getMinutes())}-${pad(ahora.getSeconds())}`;
+        return `venta_por_productos_${fecha}_${hora}.${ext}`;
+    }
+
+    // Dispara la descarga de un Blob
+    function descargarArchivo(contenido, tipo, ext) {
+        const blob = new Blob(['\uFEFF' + contenido], { type: tipo });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nombreArchivoExportacion(ext);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // ──────────────────────────────────────────────
+    //  EXPORTAR A EXCEL (XML Spreadsheet 2003, .xls)
+    //  Formato XML nativo de Excel, sin librerías externas
+    // ──────────────────────────────────────────────
+    function xmlEscape(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function exportarExcel() {
+        if (filas.length === 0) {
+            alert('No hay productos para exportar. Primero agrega productos a la lista.');
+            return;
+        }
+
+        const cabecera = ['Producto', 'Cantidad', 'Costo', 'Liquidación', 'Margen', 'Subtotal Costo', 'Subtotal Liquidación', 'Subtotal Margen'];
+        const filasDatos = filas.map(f => [
+            f.producto,
+            f.cantidad,
+            f.costo,
+            f.liquidacion,
+            f.liquidacion - f.costo,
+            f.cantidad * f.costo,
+            f.cantidad * f.liquidacion,
+            f.cantidad * (f.liquidacion - f.costo),
+        ]);
+
+        const totalQty = filas.reduce((acc, f) => acc + f.cantidad, 0);
+        const totalCosto = filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0);
+        const totalLiquid = filas.reduce((acc, f) => acc + f.cantidad * f.liquidacion, 0);
+        const totalMargen = totalLiquid - totalCosto;
+
+        // Construye una celda XML
+        const cell = (valor, tipo = 'String', styleId = '') => {
+            const s = styleId ? ` ss:StyleID="${styleId}"` : '';
+            if (tipo === 'Number') {
+                const num = Number(valor);
+                const v = isNaN(num) ? 0 : num;
+                return `<Cell${s}><Data ss:Type="Number">${v}</Data></Cell>`;
+            }
+            return `<Cell${s}><Data ss:Type="String">${xmlEscape(valor)}</Data></Cell>`;
+        };
+
+        const headerRow =
+            `<Row ss:Height="20">` +
+            cabecera.map(h => cell(h, 'String', 'Header')).join('') +
+            `</Row>`;
+
+        const dataRows = filasDatos.map(fila =>
+            `<Row>` +
+            cell(fila[0], 'String') +
+            cell(fila[1], 'Number', 'Center') +
+            fila.slice(2).map(v => cell(v, 'Number', 'Money')).join('') +
+            `</Row>`
+        ).join('');
+
+        const totalRow =
+            `<Row>` +
+            cell('TOTAL', 'String', 'Total') +
+            cell(totalQty, 'Number', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell(totalCosto, 'Number', 'TotalMoney') +
+            cell(totalLiquid, 'Number', 'TotalMoney') +
+            cell(totalMargen, 'Number', 'TotalMoney') +
+            `</Row>`;
+
+        const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Header">
+   <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#2563EB" ss:Pattern="Solid"/>
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+  </Style>
+  <Style ss:ID="Center">
+   <Alignment ss:Horizontal="Center"/>
+  </Style>
+  <Style ss:ID="Money">
+   <NumberFormat ss:Format="$#,##0.00"/>
+  </Style>
+  <Style ss:ID="Total">
+   <Font ss:Bold="1"/>
+   <Interior ss:Color="#D9E1F2" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="TotalMoney">
+   <Font ss:Bold="1"/>
+   <Interior ss:Color="#D9E1F2" ss:Pattern="Solid"/>
+   <NumberFormat ss:Format="$#,##0.00"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Venta por productos">
+  <Table>
+   <Column ss:Width="280"/>
+   <Column ss:Width="70"/>
+   <Column ss:Width="85"/>
+   <Column ss:Width="90"/>
+   <Column ss:Width="80"/>
+   <Column ss:Width="95"/>
+   <Column ss:Width="110"/>
+   <Column ss:Width="110"/>
+   ${headerRow}
+   ${dataRows}
+   ${totalRow}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+        descargarArchivo(xml, 'application/vnd.ms-excel', 'xls');
+    }
+
+    // ──────────────────────────────────────────────
+    //  BOTONES
+    // ──────────────────────────────────────────────
+    btnAgregar.addEventListener('click', agregarProducto);
+
+
+    btnExportar.addEventListener('click', exportarCSV);
+    btnExportarExcel.addEventListener('click', exportarExcel);
+    btnLimpiar.addEventListener('click', () => {
+        if (filas.length === 0) return;
+        if (confirm(`¿Eliminar las ${filas.length} filas de la tabla?`)) {
+            filas = [];
+            renderizarTabla();
+            resetearFormulario();
+        }
+    });
+
+    // Atajo: Ctrl+Enter para agregar desde el input de cantidad
+    cantidadInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            agregarProducto();
+        }
+    });
+
+    // ──────────────────────────────────────────────
+    //  INICIALIZACIÓN
+    // ──────────────────────────────────────────────
+    // Abrir el selector de archivos al pulsar el botón
+    btnCargar.addEventListener('click', () => {
+        fileCsv.value = '';
+        fileCsv.click();
+    });
+
+    // Procesar el archivo CSV elegido (puede tener cualquier nombre)
+    fileCsv.addEventListener('change', (e) => {
+        const archivo = e.target.files && e.target.files[0];
+        if (!archivo) return;
+
+        // Validar que el archivo sea CSV
+        const esCSV =
+            /\.csv$/i.test(archivo.name) ||
+            archivo.type === 'text/csv' ||
+            archivo.type === 'application/vnd.ms-excel' ||
+            archivo.type === 'application/csv' ||
+            archivo.type === '';
+
+        if (!esCSV) {
+            productosData = [];
+            mostrarEstado(
+                `❌ "${archivo.name}" no es un archivo CSV. Selecciona un archivo con extensión .csv`,
+                'error'
+            );
+            fileCsv.value = '';
+            return;
+        }
+
+        btnCargar.disabled = true;
+        btnCargar.textContent = '⏳ Cargando…';
+        mostrarEstado(`Cargando ${archivo.name}…`, 'info');
+
+        const lector = new FileReader();
+        lector.onload = () => {
+            try {
+                const texto = String(lector.result).replace(/^\uFEFF/, ''); // quitar BOM
+                cargarDesdeTexto(texto);
+                // Actualizar los precios de las filas ya agregadas con el catálogo recién cargado
+                const huboFilas = filas.length > 0;
+                filas.forEach(f => {
+                    const match = productosData.find(p => normalize(p[0]) === normalize(f.producto));
+                    if (match) {
+                        f.costo = match[1];
+                        f.liquidacion = match[2];
+                    }
+                });
+                if (huboFilas) renderizarTabla();
+                guardarProductos(archivo.name);
+                mostrarEstado(`✅ ${productosData.length} productos cargados desde ${archivo.name}`, 'ok');
+            } catch (error) {
+                console.error('No se pudo cargar el CSV:', error);
+                productosData = [];
+                mostrarEstado(`❌ No se pudo cargar ${archivo.name}: ${error.message}`, 'error');
+            } finally {
+                btnCargar.disabled = false;
+                btnCargar.textContent = '📂 Cargar productos';
+                productoSeleccionado = null;
+                productoInput.value = '';
+                suggestionsList.classList.remove('visible');
+                productoPreview.textContent = '';
+                productoInput.focus();
+            }
+        };
+        lector.onerror = () => {
+            productosData = [];
+            mostrarEstado(`❌ No se pudo leer el archivo ${archivo.name}.`, 'error');
+            btnCargar.disabled = false;
+            btnCargar.textContent = '📂 Cargar productos';
+        };
+        lector.readAsText(archivo);
+    });
+
+    // Restaurar productos guardados de la última carga (si existen)
+    const guardados = recuperarProductosGuardados();
+    if (guardados) {
+        productosData = guardados.productos;
+        mostrarEstado(
+            `✅ ${productosData.length} productos cargados desde ${guardados.nombreArchivo || 'CSV'} (guardados)`,
+            'ok'
+        );
+    } else {
+        mostrarEstado('ℹ️ Pulsa "Cargar productos" y elige un archivo CSV con columnas: Producto, Variante, Precio costo y Precio liquidacion', 'info');
+    }
+
+    // Restaurar las filas de la tabla guardadas (si existen)
+    const filasGuardadas = recuperarFilasGuardadas();
+    if (filasGuardadas && filasGuardadas.length > 0) {
+        filas = filasGuardadas;
+        renderizarTabla();
+    }
+    productoInput.focus();
+    </script>
+</body>
+</html>
