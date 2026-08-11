@@ -1528,6 +1528,11 @@
         actualizarMargenNeto();
     });
 
+    // Seleccionar el valor de los inputs numéricos al recibir el foco
+    [cantidadInput, gastosInput].forEach(input => {
+        input.addEventListener('focus', () => input.select());
+    });
+
     // ──────────────────────────────────────────────
     //  INICIALIZACIÓN
     // ──────────────────────────────────────────────
