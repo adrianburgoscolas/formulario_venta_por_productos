@@ -194,6 +194,70 @@
             background: #fff;
         }
 
+        /* ── Control de margen de venta ────────── */
+        .margen-group {
+            position: relative;   /* ancla para el indicador absoluto */
+        }
+
+        .margen-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .margen-toggle .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .margen-toggle input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .margen-group input[type="number"] {
+            width: 90px;
+            padding: 0.5rem 0.65rem;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background: #fafbfc;
+            transition: border-color 0.2s;
+        }
+
+        .margen-group input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+            background: #fff;
+        }
+
+        .margen-group input[type="number"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .margen-indicador {
+            position: absolute;   /* no ocupa espacio: no desplaza el input */
+            top: 100%;            /* debajo del bloque del input */
+            left: 0;
+            right: 0;             /* limitado al ancho del bloque: sin overflow horizontal */
+            margin-top: 0.15rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--primary);
+            line-height: 1.2;
+            pointer-events: none;
+        }
+
         .btn {
             padding: 0.65rem 1.6rem;
             font-weight: 600;
@@ -434,6 +498,25 @@
                         value="1"
                     />
                 </div>
+                <div class="form-group margen-group" style="max-width: 240px;">
+                    <label for="usarMargenCheck">⚖️ Margen de venta</label>
+                    <div class="margen-toggle">
+                        <label class="checkbox-label" for="usarMargenCheck">
+                            <input type="checkbox" id="usarMargenCheck" />
+                            <span>Usar %</span>
+                        </label>
+                        <input
+                            type="number"
+                            id="margenPctInput"
+                            min="0"
+                            step="0.1"
+                            placeholder="0"
+                            disabled
+                            title="Margen porcentual sobre el precio de liquidación"
+                        />
+                    </div>
+                    <div id="margenIndicador" class="margen-indicador"></div>
+                </div>
                 <div class="form-group" style="justify-content: flex-end;">
                     <button class="btn btn-primary" id="btnAgregar" type="button">
                         ➕ Agregar
@@ -536,6 +619,11 @@
 
     function usd(valor) {
         return formatoUSD.format(valor);
+    }
+
+    // Redondea a 2 decimales (evita artefactos de punto flotante en exportaciones)
+    function redondear2(valor) {
+        return Math.round((valor + Number.EPSILON) * 100) / 100;
     }
 
     // ──────────────────────────────────────────────
@@ -901,6 +989,43 @@
         }
     }
 
+    // ──────────────────────────────────────────────
+    //  MARGEN DE VENTA (opcional, sobre liquidación)
+    //  Si está activo, el precio de venta efectivo =
+    //  liquidacion * (1 + margen%/100). Reemplaza la
+    //  liquidación en todos los cálculos y exportaciones.
+    //  (el valor original de liquidación no se modifica)
+    // ──────────────────────────────────────────────
+    const STORAGE_KEY_MARGEN = 'marice_margen_v1';
+
+    function leerMargenPct() {
+        const v = parseFloat(margenPctInput.value);
+        return isNaN(v) || v < 0 ? 0 : v;
+    }
+
+    // Precio de venta efectivo según el margen %
+    function precioVenta(liquidacion) {
+        return usarMargen ? liquidacion * (1 + margenPct / 100) : liquidacion;
+    }
+
+    function guardarMargen() {
+        try {
+            localStorage.setItem(STORAGE_KEY_MARGEN, JSON.stringify({ usar: usarMargen, pct: margenPct }));
+        } catch (error) {
+            console.warn('No se pudieron persistir el margen de venta:', error);
+        }
+    }
+
+    // Muestra/oculta el indicador "Aplicando margen del X% sobre liquidación".
+    // Vive en una línea reservada (min-height) debajo del formulario, así que
+    // mostrarlo/ocultarlo NO desplaza el contenido que está arriba.
+    function actualizarIndicadorMargen() {
+        if (!margenIndicador) return;
+        margenIndicador.textContent = (usarMargen && margenPct > 0)
+            ? `⚙️ Aplicando margen del ${margenPct}% sobre liquidación`
+            : '';
+    }
+
     function mostrarEstado(mensaje, tipo) {
         const el = document.getElementById('estadoCarga');
         if (!el) return;
@@ -936,6 +1061,9 @@
     const totalMargenEl     = document.getElementById('totalMargen');
     const gastosInput       = document.getElementById('gastosInput');
     const totalMargenNetoEl = document.getElementById('totalMargenNeto');
+    const usarMargenCheck   = document.getElementById('usarMargenCheck');
+    const margenPctInput    = document.getElementById('margenPctInput');
+    const margenIndicador   = document.getElementById('margenIndicador');
 
     // ──────────────────────────────────────────────
     //  ESTADO
@@ -943,6 +1071,8 @@
     let productoSeleccionado = null;   // el array [nombre, costo, liquidacion]
     let filas = [];                     // { producto, cantidad, costo, liquidacion }
     let selectedSuggestionIdx = -1;
+    let usarMargen = false;             // ¿se aplica el margen % de venta?
+    let margenPct = 0;                  // margen % sobre la liquidación
 
     // ──────────────────────────────────────────────
     //  AUTOCOMPLETE
@@ -1219,17 +1349,25 @@
         }
 
         let totalCosto = 0;
-        let totalLiquid = 0;
+        let totalVenta = 0;
         let totalMargen = 0;
         let totalQty = 0;
 
+        // ¿Se marcan con * y tooltip las celdas calculadas con el margen %?
+        const usarNota = usarMargen && margenPct > 0;
+        const tituloVenta = usarNota
+            ? `title="Precio calculado con margen del ${margenPct}% sobre liquidación"`
+            : '';
+        const marca = usarNota ? ' *' : '';
+
         filas.forEach((f, i) => {
+            const venta = precioVenta(f.liquidacion);      // precio de venta efectivo
             const subCosto = f.cantidad * f.costo;
-            const subLiquid = f.cantidad * f.liquidacion;
-            const margen = f.liquidacion - f.costo;      // margen unitario
+            const subVenta = f.cantidad * venta;
+            const margen = venta - f.costo;                // margen unitario
             const subMargen = f.cantidad * margen;
             totalCosto += subCosto;
-            totalLiquid += subLiquid;
+            totalVenta += subVenta;
             totalMargen += subMargen;
             totalQty += f.cantidad;
 
@@ -1239,10 +1377,10 @@
                 <td><strong>${escapeHTML(f.producto)}</strong></td>
                 <td class="text-center"><span class="qty-badge">${f.cantidad}</span></td>
                 <td class="text-right font-mono">${usd(f.costo)}</td>
-                <td class="text-right font-mono">${usd(f.liquidacion)}</td>
+                <td class="text-right font-mono" ${tituloVenta}>${usd(venta)}${marca}</td>
                 <td class="text-right font-mono">${usd(margen)}</td>
                 <td class="text-right font-mono"><strong>${usd(subCosto)}</strong></td>
-                <td class="text-right font-mono"><strong>${usd(subLiquid)}</strong></td>
+                <td class="text-right font-mono" ${tituloVenta}><strong>${usd(subVenta)}</strong>${marca}</td>
                 <td class="text-right font-mono"><strong>${usd(subMargen)}</strong></td>
                 <td class="text-center">
                     <button class="btn btn-danger" style="padding:0.3rem 0.6rem; font-size:0.75rem;"
@@ -1257,18 +1395,19 @@
         // Actualizar totales
         totalItemsEl.textContent = totalQty;
         totalCostoEl.textContent = usd(totalCosto);
-        totalLiquidacionEl.textContent = usd(totalLiquid);
+        totalLiquidacionEl.textContent = usd(totalVenta);
         totalMargenEl.textContent = usd(totalMargen);
         actualizarMargenNeto();
     }
 
     // Total margen neto = margen de los productos − gastos generales
+    // (el margen usa el precio de venta efectivo: con o sin margen %)
     function actualizarMargenNeto() {
         if (filas.length === 0) {
             totalMargenNetoEl.textContent = usd(0);
             return;
         }
-        const totalMargen = filas.reduce((acc, f) => acc + f.cantidad * (f.liquidacion - f.costo), 0);
+        const totalMargen = filas.reduce((acc, f) => acc + f.cantidad * (precioVenta(f.liquidacion) - f.costo), 0);
         totalMargenNetoEl.textContent = usd(totalMargen - leerGastos());
     }
 
@@ -1295,32 +1434,43 @@
         }
 
         const cabecera = ['Producto', 'Cantidad', 'Costo', 'Liquidación', 'Margen', 'Subtotal Costo', 'Subtotal Liquidación', 'Subtotal Margen'];
-        const filasCSV = filas.map(f => [
-            f.producto,
-            f.cantidad,
-            f.costo,
-            f.liquidacion,
-            f.liquidacion - f.costo,
-            f.cantidad * f.costo,
-            f.cantidad * f.liquidacion,
-            f.cantidad * (f.liquidacion - f.costo),
-        ]);
+        const filasCSV = filas.map(f => {
+            const venta = redondear2(precioVenta(f.liquidacion));   // precio de venta efectivo
+            return [
+                f.producto,
+                f.cantidad,
+                redondear2(f.costo),
+                venta,
+                redondear2(venta - f.costo),
+                redondear2(f.cantidad * f.costo),
+                redondear2(f.cantidad * venta),
+                redondear2(f.cantidad * (venta - f.costo)),
+            ];
+        });
 
         const totalQty = filas.reduce((acc, f) => acc + f.cantidad, 0);
-        const totalCosto = filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0);
-        const totalLiquid = filas.reduce((acc, f) => acc + f.cantidad * f.liquidacion, 0);
-        const totalMargen = totalLiquid - totalCosto;
+        const totalCosto = redondear2(filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0));
+        const totalVenta = redondear2(filas.reduce((acc, f) => acc + f.cantidad * precioVenta(f.liquidacion), 0));
+        const totalMargen = redondear2(totalVenta - totalCosto);
         const gastos = leerGastos();
-        const margenNeto = totalMargen - gastos;
+        const margenNeto = redondear2(totalMargen - gastos);
 
         const filasFinales = [
             cabecera,
             ...filasCSV,
             [],
-            ['TOTAL', totalQty, '', '', '', totalCosto, totalLiquid, totalMargen],
+            ['TOTAL', totalQty, '', '', '', totalCosto, totalVenta, totalMargen],
             ['GASTOS GENERALES', '', '', '', '', '', '', gastos],
             ['MARGEN NETO', '', '', '', '', '', '', margenNeto],
         ];
+
+        // Nota al final cuando el margen % está activo (nombres de columnas sin cambios)
+        if (usarMargen && margenPct > 0) {
+            filasFinales.push(
+                [],
+                [`MARGEN % APLICADO: ${margenPct}% sobre precio de liquidación`, '', '', '', '', '', '', '']
+            );
+        }
 
         const csv = filasFinales.map(f => f.map(csvEscape).join(',')).join('\r\n');
 
@@ -1368,23 +1518,26 @@
         }
 
         const cabecera = ['Producto', 'Cantidad', 'Costo', 'Liquidación', 'Margen', 'Subtotal Costo', 'Subtotal Liquidación', 'Subtotal Margen'];
-        const filasDatos = filas.map(f => [
-            f.producto,
-            f.cantidad,
-            f.costo,
-            f.liquidacion,
-            f.liquidacion - f.costo,
-            f.cantidad * f.costo,
-            f.cantidad * f.liquidacion,
-            f.cantidad * (f.liquidacion - f.costo),
-        ]);
+        const filasDatos = filas.map(f => {
+            const venta = redondear2(precioVenta(f.liquidacion));   // precio de venta efectivo
+            return [
+                f.producto,
+                f.cantidad,
+                redondear2(f.costo),
+                venta,
+                redondear2(venta - f.costo),
+                redondear2(f.cantidad * f.costo),
+                redondear2(f.cantidad * venta),
+                redondear2(f.cantidad * (venta - f.costo)),
+            ];
+        });
 
         const totalQty = filas.reduce((acc, f) => acc + f.cantidad, 0);
-        const totalCosto = filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0);
-        const totalLiquid = filas.reduce((acc, f) => acc + f.cantidad * f.liquidacion, 0);
-        const totalMargen = totalLiquid - totalCosto;
+        const totalCosto = redondear2(filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0));
+        const totalVenta = redondear2(filas.reduce((acc, f) => acc + f.cantidad * precioVenta(f.liquidacion), 0));
+        const totalMargen = redondear2(totalVenta - totalCosto);
         const gastos = leerGastos();
-        const margenNeto = totalMargen - gastos;
+        const margenNeto = redondear2(totalMargen - gastos);
 
         // Construye una celda XML
         const cell = (valor, tipo = 'String', styleId = '') => {
@@ -1418,7 +1571,7 @@
             cell('', 'String', 'Total') +
             cell('', 'String', 'Total') +
             cell(totalCosto, 'Number', 'TotalMoney') +
-            cell(totalLiquid, 'Number', 'TotalMoney') +
+            cell(totalVenta, 'Number', 'TotalMoney') +
             cell(totalMargen, 'Number', 'TotalMoney') +
             `</Row>`;
 
@@ -1445,6 +1598,20 @@
             cell('', 'String', 'Total') +
             cell(margenNeto, 'Number', 'TotalMoney') +
             `</Row>`;
+
+        // Fila de nota cuando el margen % está activo (nombres de columnas sin cambios)
+        const margenNotaRow = (usarMargen && margenPct > 0)
+            ? `<Row>` +
+              cell(`MARGEN % APLICADO: ${margenPct}% sobre precio de liquidación`, 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              cell('', 'String', 'Total') +
+              `</Row>`
+            : '';
 
         const xml = `<?xml version="1.0"?>
 <?mso-application progid="Excel.Sheet"?>
@@ -1490,6 +1657,7 @@
    ${totalRow}
    ${gastosRow}
    ${margenNetoRow}
+   ${margenNotaRow}
   </Table>
  </Worksheet>
 </Workbook>`;
@@ -1528,8 +1696,26 @@
         actualizarMargenNeto();
     });
 
+    // Activar/desactivar el margen % de venta sobre liquidación
+    usarMargenCheck.addEventListener('change', () => {
+        usarMargen = usarMargenCheck.checked;
+        margenPct = leerMargenPct();
+        margenPctInput.disabled = !usarMargen;
+        guardarMargen();
+        actualizarIndicadorMargen();
+        renderizarTabla();
+    });
+
+    // Actualizar el margen % en vivo
+    margenPctInput.addEventListener('input', () => {
+        margenPct = leerMargenPct();
+        guardarMargen();
+        actualizarIndicadorMargen();
+        renderizarTabla();
+    });
+
     // Seleccionar el valor de los inputs numéricos al recibir el foco
-    [cantidadInput, gastosInput].forEach(input => {
+    [cantidadInput, gastosInput, margenPctInput].forEach(input => {
         input.addEventListener('focus', () => input.select());
     });
 
@@ -1657,6 +1843,23 @@
     } catch (error) {
         console.warn('No se pudieron leer los gastos generales guardados:', error);
     }
+
+    // Restaurar el margen de venta guardado (si existe)
+    try {
+        const margenGuardado = JSON.parse(localStorage.getItem(STORAGE_KEY_MARGEN));
+        if (margenGuardado && typeof margenGuardado === 'object') {
+            usarMargen = !!margenGuardado.usar;
+            margenPct = (typeof margenGuardado.pct === 'number' && !isNaN(margenGuardado.pct) && margenGuardado.pct >= 0)
+                ? margenGuardado.pct
+                : 0;
+            usarMargenCheck.checked = usarMargen;
+            margenPctInput.value = margenPct;
+        }
+    } catch (error) {
+        console.warn('No se pudieron leer el margen de venta guardado:', error);
+    }
+    margenPctInput.disabled = !usarMargen;
+    actualizarIndicadorMargen();
 
     // Restaurar las filas de la tabla guardadas (si existen)
     const filasGuardadas = recuperarFilasGuardadas();
