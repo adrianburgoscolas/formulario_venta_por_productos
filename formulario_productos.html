@@ -343,6 +343,31 @@
             font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
         }
 
+        .totals-bar .gastos-input {
+            width: 120px;
+            padding: 0.5rem 0.65rem;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 1.15rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            text-align: right;
+            background: #fafbfc;
+            color: var(--danger);
+            transition: border-color 0.2s;
+        }
+
+        .totals-bar .gastos-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+            background: #fff;
+        }
+
+        .total-item .total-value.net {
+            color: var(--primary);
+        }
+
         /* ── Estado vacío ──────────────────────── */
         .empty-state {
             text-align: center;
@@ -452,7 +477,7 @@
             </div>
 
             <!-- Totales -->
-            <div class="totals-bar" id="totalsBar" style="display:none;">
+            <div class="totals-bar" id="totalsBar">
                 <div class="total-item">
                     <div class="total-label">Total Items</div>
                     <div class="total-value" id="totalItems">0</div>
@@ -468,6 +493,24 @@
                 <div class="total-item">
                     <div class="total-label">Total Margen</div>
                     <div class="total-value" id="totalMargen">$0.00</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-label">💸 Gastos Generales</div>
+                    <div>
+                        <input
+                            type="number"
+                            id="gastosInput"
+                            class="gastos-input"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            title="Gastos generales que se restan del margen"
+                        />
+                    </div>
+                </div>
+                <div class="total-item">
+                    <div class="total-label">Margen Neto</div>
+                    <div class="total-value net" id="totalMargenNeto">$0.00</div>
                 </div>
             </div>
 
@@ -842,6 +885,22 @@
         return null;
     }
 
+    // Gastos generales (se restan del margen total)
+    const STORAGE_KEY_GASTOS = 'marice_gastos_v1';
+
+    function leerGastos() {
+        const v = parseFloat(gastosInput.value);
+        return isNaN(v) || v < 0 ? 0 : v;
+    }
+
+    function guardarGastos() {
+        try {
+            localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(leerGastos()));
+        } catch (error) {
+            console.warn('No se pudieron persistir los gastos generales:', error);
+        }
+    }
+
     function mostrarEstado(mensaje, tipo) {
         const el = document.getElementById('estadoCarga');
         if (!el) return;
@@ -875,6 +934,8 @@
     const totalCostoEl      = document.getElementById('totalCosto');
     const totalLiquidacionEl = document.getElementById('totalLiquidacion');
     const totalMargenEl     = document.getElementById('totalMargen');
+    const gastosInput       = document.getElementById('gastosInput');
+    const totalMargenNetoEl = document.getElementById('totalMargenNeto');
 
     // ──────────────────────────────────────────────
     //  ESTADO
@@ -1148,7 +1209,12 @@
                     </td>
                 </tr>
             `;
-            totalsBar.style.display = 'none';
+            // Resetear totales a cero (el input de gastos sigue disponible)
+            totalItemsEl.textContent = '0';
+            totalCostoEl.textContent = usd(0);
+            totalLiquidacionEl.textContent = usd(0);
+            totalMargenEl.textContent = usd(0);
+            actualizarMargenNeto();
             return;
         }
 
@@ -1193,8 +1259,17 @@
         totalCostoEl.textContent = usd(totalCosto);
         totalLiquidacionEl.textContent = usd(totalLiquid);
         totalMargenEl.textContent = usd(totalMargen);
+        actualizarMargenNeto();
+    }
 
-        totalsBar.style.display = 'flex';
+    // Total margen neto = margen de los productos − gastos generales
+    function actualizarMargenNeto() {
+        if (filas.length === 0) {
+            totalMargenNetoEl.textContent = usd(0);
+            return;
+        }
+        const totalMargen = filas.reduce((acc, f) => acc + f.cantidad * (f.liquidacion - f.costo), 0);
+        totalMargenNetoEl.textContent = usd(totalMargen - leerGastos());
     }
 
     function eliminarFila(index) {
@@ -1235,12 +1310,16 @@
         const totalCosto = filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0);
         const totalLiquid = filas.reduce((acc, f) => acc + f.cantidad * f.liquidacion, 0);
         const totalMargen = totalLiquid - totalCosto;
+        const gastos = leerGastos();
+        const margenNeto = totalMargen - gastos;
 
         const filasFinales = [
             cabecera,
             ...filasCSV,
             [],
             ['TOTAL', totalQty, '', '', '', totalCosto, totalLiquid, totalMargen],
+            ['GASTOS GENERALES', '', '', '', '', '', '', gastos],
+            ['MARGEN NETO', '', '', '', '', '', '', margenNeto],
         ];
 
         const csv = filasFinales.map(f => f.map(csvEscape).join(',')).join('\r\n');
@@ -1304,6 +1383,8 @@
         const totalCosto = filas.reduce((acc, f) => acc + f.cantidad * f.costo, 0);
         const totalLiquid = filas.reduce((acc, f) => acc + f.cantidad * f.liquidacion, 0);
         const totalMargen = totalLiquid - totalCosto;
+        const gastos = leerGastos();
+        const margenNeto = totalMargen - gastos;
 
         // Construye una celda XML
         const cell = (valor, tipo = 'String', styleId = '') => {
@@ -1339,6 +1420,30 @@
             cell(totalCosto, 'Number', 'TotalMoney') +
             cell(totalLiquid, 'Number', 'TotalMoney') +
             cell(totalMargen, 'Number', 'TotalMoney') +
+            `</Row>`;
+
+        const gastosRow =
+            `<Row>` +
+            cell('GASTOS GENERALES', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell(gastos, 'Number', 'TotalMoney') +
+            `</Row>`;
+
+        const margenNetoRow =
+            `<Row>` +
+            cell('MARGEN NETO', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell('', 'String', 'Total') +
+            cell(margenNeto, 'Number', 'TotalMoney') +
             `</Row>`;
 
         const xml = `<?xml version="1.0"?>
@@ -1383,6 +1488,8 @@
    ${headerRow}
    ${dataRows}
    ${totalRow}
+   ${gastosRow}
+   ${margenNetoRow}
   </Table>
  </Worksheet>
 </Workbook>`;
@@ -1413,6 +1520,17 @@
             e.preventDefault();
             agregarProducto();
         }
+    });
+
+    // Actualizar el margen neto y persistir al cambiar los gastos generales
+    gastosInput.addEventListener('input', () => {
+        guardarGastos();
+        actualizarMargenNeto();
+    });
+
+    // Seleccionar el valor de los inputs numéricos al recibir el foco
+    [cantidadInput, gastosInput].forEach(input => {
+        input.addEventListener('focus', () => input.select());
     });
 
     // ──────────────────────────────────────────────
@@ -1528,6 +1646,16 @@
         );
     } else {
         mostrarEstado('ℹ️ Pulsa "Cargar productos" y elige un archivo .csv o .xlsx con la columna Precio liquidacion (Producto/Variante opcionales → se rellenan con {---})', 'info');
+    }
+
+    // Restaurar los gastos generales guardados (si existen)
+    try {
+        const gastosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY_GASTOS));
+        if (typeof gastosGuardados === 'number' && !isNaN(gastosGuardados) && gastosGuardados >= 0) {
+            gastosInput.value = gastosGuardados;
+        }
+    } catch (error) {
+        console.warn('No se pudieron leer los gastos generales guardados:', error);
     }
 
     // Restaurar las filas de la tabla guardadas (si existen)
